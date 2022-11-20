@@ -34,7 +34,7 @@ TARGET = simpleserial-dilithium-ref
 
 # List C source files here.
 # Header files (.h) are automatically pulled in.
-SRC += simpleserial-dilithium-ref.c
+SRC += simpleserial-dilithium-ref.c dilithium/ref/randombytes.c dilithium/ref/fips202.c dilithium/ref/symmetric-shake.c
 
 # -----------------------------------------------------------------------------
 

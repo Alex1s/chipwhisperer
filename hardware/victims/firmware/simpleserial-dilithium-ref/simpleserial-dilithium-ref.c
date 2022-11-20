@@ -16,11 +16,32 @@
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include "simpleserial-dilithium-ref.h"
+
 #include "hal.h"
 #include <stdint.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include "simpleserial.h"
+
+#include "dilithium/ref/api.h"
+#include "dilithium/ref/randombytes.h"
+
+uint8_t alg = 3;
+uint8_t secret_key[pqcrystals_dilithium5_SECRETKEYBYTES];
+uint16_t secret_key_length = 0;
+
+uint8_t seed[MAX_PAYLOAD_LENGTH];
+uint8_t seed_length = 0;
+
+#define ASSERT(cond, msg) do \
+{ \
+  if (!(cond)) { \
+    simpleserial_put('a', sizeof(msg) - 1, (msg)); \
+    return ASSERT_FAILED; \
+  } \
+} while (0)
 
 uint8_t get_key(uint8_t* k, uint8_t len)
 {
@@ -53,39 +74,65 @@ uint8_t reset(uint8_t* x, uint8_t len)
 	return 0x00;
 }
 
-#if SS_VER == SS_VER_2_1
-uint8_t aes(uint8_t cmd, uint8_t scmd, uint8_t len, uint8_t *buf)
-{
-    uint8_t req_len = 0;
-    uint8_t err = 0;
-
-    if (scmd & 0x02) {
-        req_len += 16;
-        if (req_len > len) {
-            return SS_ERR_LEN;
-        }
-        err = get_key(buf + req_len - 16, 16);
-        if (err)
-            return err;
-    }
-    if (scmd & 0x01) {
-        req_len += 16;
-        if (req_len > len) {
-            return SS_ERR_LEN;
-        }
-        err = get_pt(buf + req_len - 16, 16);
-        if (err)
-            return err;
-    }
-
-    if (len != req_len) {
-        return SS_ERR_LEN;
-    }
-
-    return 0x00;
-
+uint16_t get_key_length(void) {
+  switch (alg) {
+    case 2:
+      return pqcrystals_dilithium2_SECRETKEYBYTES;
+    case 3:
+      return pqcrystals_dilithium3_SECRETKEYBYTES;
+    case 5:
+      return pqcrystals_dilithium5_SECRETKEYBYTES;
+  }
+  return 0;
 }
-#endif
+
+uint8_t set_key(uint8_t cmd, uint8_t scmd, uint8_t len, uint8_t *buf) {
+  ASSERT(cmd == CMD_SET_KEY, "set_key: invalid cmd");
+  ASSERT(alg != 0, "set_key: alg not specified");
+
+  uint16_t key_length = get_key_length();
+  uint8_t last_scmd = key_length / MAX_PAYLOAD_LENGTH;
+  uint8_t does_divide = !(key_length % MAX_PAYLOAD_LENGTH);
+  if (does_divide) {
+    last_scmd++;
+  }
+  ASSERT(scmd <= last_scmd, "set_key: scmd out of range");
+  if (does_divide || scmd < last_scmd) {
+    ASSERT(len == MAX_PAYLOAD_LENGTH, "set_key: invalid length");
+  } else if (scmd == last_scmd) {
+    ASSERT(len == key_length % MAX_PAYLOAD_LENGTH, "set_key: last scmd has invalid length");
+  }
+  memcpy(secret_key + MAX_PAYLOAD_LENGTH * scmd, buf, len);
+  simpleserial_put('r', sizeof("ok") - 1, "ok");
+  return 0x00;
+}
+
+uint8_t set_seed(uint8_t cmd, uint8_t scmd, uint8_t len, uint8_t *buf) {
+  uint8_t ok_msg[13 + MAX_PAYLOAD_LENGTH + 1] = "set_seed ok: ";
+  ASSERT(cmd == CMD_SET_SEED, "set_seed: invalid cmd");
+  ASSERT(scmd == 0, "set_seed: invalid scmd");
+  ASSERT(len <= MAX_PAYLOAD_LENGTH, "set_seed: invalid len");
+  memcpy(seed, buf, len);
+  memcpy(ok_msg + 13, buf, len);
+  simpleserial_put('r', 13 + len, ok_msg);
+  pseudorandombytes_seed(buf, len);
+  return 0x00;
+}
+
+uint8_t set_alg(uint8_t cmd, uint8_t scmd, uint8_t len, uint8_t *buf) {
+  uint8_t ok_msg[] = "set_alg ok: 0";
+
+  ASSERT(cmd == CMD_SET_ALG, "set_alg: invalid cmd");
+  ASSERT(scmd == 0, "set_alg: invalid scmd");
+  ASSERT(len == 1, "set_alg: invalid len");
+  uint8_t new_alg = *buf;
+  ASSERT(new_alg == 2 || new_alg == 3 || new_alg == 5, "invalid alg for set_alg");
+
+  alg = new_alg;
+  ok_msg[sizeof(ok_msg) - 2] += new_alg;
+  simpleserial_put('r', sizeof(ok_msg) - 1, ok_msg);
+  return 0x00;
+}
 
 int main(void)
 {
@@ -109,7 +156,8 @@ int main(void)
 	simpleserial_addcmd('k', 16, get_key);
 	simpleserial_addcmd('x', 0, reset);
 #else
-    simpleserial_addcmd(0x01, 16, aes);
+    simpleserial_addcmd(CMD_SET_ALG, 1, set_alg);
+    simpleserial_addcmd(CMD_SET_SEED, MAX_PAYLOAD_LENGTH, set_seed);
 
 #endif
 	while(1)
