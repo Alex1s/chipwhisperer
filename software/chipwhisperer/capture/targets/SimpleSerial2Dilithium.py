@@ -5,9 +5,20 @@ import time
 from typing import List
 import numpy as np
 import logging
+import math
 dilithium = importlib.import_module("python-dilithium.dilithium")
 dilithium.generic = importlib.import_module("python-dilithium.dilithium.generic")
 dilithium_params = dilithium.__params
+
+class TargetIOError(BlockingIOError):
+    @property
+    def data(self):
+        return self.__data
+
+    def __init__(self, message: str, data):
+        super(TargetIOError, self).__init__(message)
+        self.__data = data
+
 
 class LogToExceptionHandler(logging.NullHandler):
     def __init__():
@@ -39,8 +50,10 @@ class SimpleSerial2Dilithium(SimpleSerial2):
     __COMMAND_ALGORITHM = 'q'
     __COMMAND_SET_SECRET_KEY = 'k'
     __COMMAND_SIGN = 'e'
+    __COMMAND_GET_SIGN = 'g'
     __FIRST_ERR_RATE_PAYLOAD249_ITER100 = [ 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 1., 1., 1., 3., 3., 19., 12., 11., 7., 10., 5., 5., 9., 2., 4., 2., 1., 0., 1., 0., 0., 0., 2., 0., 0., 0., 0., 0., 0., 0., 1., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.]
     __FIRST_ERROR_RATE_PAYLOAD128_ITER10000 = [0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 1., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 1., 0., 0., 0., 0., 0., 0., 0., 0., 0., 1., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 1., 0., 0., 0., 0., 1., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.]
+    __FIRST_ERROR_RATE_PAYLOAD128_ITER100000 = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 1, 0, 0, 0, 0, 2, 0, 1, 3, 0, 1, 1, 1, 0, 0, 0, 0, 0, 3, 0, 1, 0, 2, 0, 0, 2, 1, 0, 0, 0, 1, 0, 0, 1, 0, 2, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0]
     
     def __send_cmd_long(self, command: str, payload: bytes, timeout: int = 2000) -> None:
         assert len(command) == 1
@@ -103,12 +116,16 @@ class SimpleSerial2Dilithium(SimpleSerial2):
         return self.__secret_key
     
     @property
-    def crypto_bytes(self) -> int:
+    def crypto_secretkeybytes(self) -> int:
         return dilithium_params[self.__algorithm]['CRYPTO_SECRETKEYBYTES']
+
+    @property
+    def crypto_bytes(self) -> int:
+        return dilithium_params[self.__algorithm]['CRYPTO_BYTES']
     
     @secret_key.setter
     def secret_key(self, s: bytes):
-        if len(s) != self.crypto_bytes:
+        if len(s) != self.crypto_secretkeybytes:
             raise ValueError(f'Expected secret key of length {self.crypto_bytes} but got {len(s)}')
         # self.send_cmd_long(self.__COMMAND_SECRET_KEY, s)
         self.__secre_key = s
@@ -124,15 +141,24 @@ class SimpleSerial2Dilithium(SimpleSerial2):
         assert s is not None
         self.__scope = s
         
-    def sign(self, message: bytes) -> bytes:
+    def sign(self, message: bytes) -> None:
+        ok_reply = b'sign ok'
         if len(message) > self.__MAX_PAYLOAD_LENGTH:
             raise ValueError()
         self.send_cmd(self.__COMMAND_SIGN, 0, message)
-        reply = self.__simpleserial_read_long(self.crypto_bytes, 'r')
-        assert reply == dilithium.generic.signature(message, self.secret_key)
-        return reply
-    
-    def reboot_flush(self):            
+        reply = self.simpleserial_read('r', len(ok_reply), timeout=1000)
+        assert reply == ok_reply
+
+    def get_sig(self) -> bytes:
+        num_packets = math.ceil(self.crypto_bytes / self.__MAX_PAYLOAD_LENGTH)
+        len_last_packet = self.crypto_bytes % self.__MAX_PAYLOAD_LENGTH if self.crypto_bytes % self.__MAX_PAYLOAD_LENGTH else self.__MAX_PAYLOAD_LENGTH
+        dat = b''
+        for i in range(num_packets - 1):
+            dat += self.simpleserial_cmd_until_success(self.__COMMAND_GET_SIGN, i, b'\xAA', cmd_read='r', pay_len=self.__MAX_PAYLOAD_LENGTH)
+        dat += self.simpleserial_cmd_until_success(self.__COMMAND_GET_SIGN, num_packets - 1, b'\xAA', cmd_read='r', pay_len=len_last_packet)
+        return dat
+
+    def reboot_flush(self):
         self.scope.io.nrst = False
         time.sleep(0.05)
         self.scope.io.nrst = "high_z"
@@ -163,7 +189,8 @@ class SimpleSerial2Dilithium(SimpleSerial2):
             try:
                 response = self.simpleserial_read(cmd='r', timeout=100)
                 assert bytes(response) == expected, f'got: {bytes(response)}; expected: {expected}'
-            except BlockingIOError:
+            except TargetIOError as e:
+                response = e.data
                 #assert response is not None, f'i={i}'
                 #assert response.startswith(b'set_alg ok: 3'), f'i={i}; got: {bytes(response)}'
                 diff_idx = get_index_of_first_diff_bytes(response, expected)
@@ -181,15 +208,16 @@ class SimpleSerial2Dilithium(SimpleSerial2):
         self.__handler.warning_or_higher_logged = False
         ret = super(SimpleSerial2Dilithium, self).simpleserial_read(cmd=cmd, pay_len=pay_len, end=end, timeout=timeout, ack=ack)
         if self.__handler.warning_or_higher_logged:
-            raise BlockingIOError('target logger logged a warning during simpleserial_read')
+            raise TargetIOError('target logger logged a warning during simpleserial_read', ret)
         return ret
 
-    def simpleserial_read_until_success(self, cmd=None, pay_len=None, end='\n', timeout=250, ack=True):
+    def simpleserial_cmd_until_success(self, cmd, scmd, data, cmd_read=None, pay_len=None, end='\n', timeout=250, ack=True):
         while True:
             try:
-                ret = self.simpleserial_read(cmd=cmd, pay_len=pay_len, end=end, timeout=timeout, ack=ack)
+                self.send_cmd(cmd, scmd, data)
+                ret = self.simpleserial_read(cmd=cmd_read, pay_len=pay_len, end=end, timeout=timeout, ack=ack)
                 return ret
-            except BlockingIOError as e:
+            except TargetIOError as e:
                 self.__logger.info(f'got an BlockingIOError exception: {e}; trying again ...')
                 self.flush()
 

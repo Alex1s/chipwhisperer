@@ -29,8 +29,9 @@
 #include "dilithium/ref/params.h"
 #include "dilithium/ref/randombytes.h"
 
-uint8_t alg = 0;
-uint8_t secret_key[pqcrystals_dilithium5_SECRETKEYBYTES];
+
+uint8_t alg = DILITHIUM_MODE;
+uint8_t secret_key[pqcrystals_dilithium5_SECRETKEYBYTES + 10] = DEFAULT_SECRET_KEY ;
 uint16_t secret_key_length = 0;
 
 uint8_t seed[MAX_PAYLOAD_LENGTH];
@@ -156,11 +157,12 @@ uint8_t sign(uint8_t cmd, uint8_t scmd, uint8_t len, uint8_t *buf) {
   ASSERT(cmd == CMD_SIGN, "sign: invalid cmd");
   ASSERT(scmd == 0, "sign: invalid scmd");
   ASSERT(alg != 0, "sign: alg not set");
-  ASSERT(alg == 0, "sign: alg has to be 2 as of now");
+  ASSERT(alg == 2, "sign: alg has to be 2 as of now");
 
   int result = pqcrystals_dilithium2_ref_signature(sig, &siglen, buf, len, secret_key);
 
   ASSERT(siglen == pqcrystals_dilithium2_BYTES, "sign: signature has unexpected length");
+  simpleserial_put('r', sizeof("sign ok") - 1, "sign ok");
   return result; // 0 == success
 }
 

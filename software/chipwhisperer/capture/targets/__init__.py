@@ -36,6 +36,7 @@ from .SimpleSerial import SimpleSerial
 from .CW305 import CW305
 from .SimpleSerial2 import SimpleSerial2, SimpleSerial2_CDC
 from .SimpleSerial2Dilithium import SimpleSerial2Dilithium
+from .SimpleSerial2Dilithium import TargetIOError
 from .CW305_ECC import CW305_ECC
 from .CW310 import CW310
 from typing import Union
