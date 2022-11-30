@@ -146,7 +146,7 @@ class SimpleSerial2Dilithium(SimpleSerial2):
         if len(message) > self.__MAX_PAYLOAD_LENGTH:
             raise ValueError()
         self.send_cmd(self.__COMMAND_SIGN, 0, message)
-        reply = self.simpleserial_read('r', len(ok_reply), timeout=1000)
+        reply = self.simpleserial_read('r', len(ok_reply), timeout=5000)
         assert reply == ok_reply
 
     def get_sig(self) -> bytes:
