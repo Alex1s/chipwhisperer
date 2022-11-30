@@ -156,34 +156,12 @@ uint8_t sign(uint8_t cmd, uint8_t scmd, uint8_t len, uint8_t *buf) {
   ASSERT(cmd == CMD_SIGN, "sign: invalid cmd");
   ASSERT(scmd == 0, "sign: invalid scmd");
   ASSERT(alg != 0, "sign: alg not set");
+  ASSERT(alg == 0, "sign: alg has to be 2 as of now");
 
-  //uint8_t deb[] = "0MESGLEN";
-  //deb[0] += len;
-  //simpleserial_put('a', sizeof(deb), deb);
-  //simpleserial_put('a', len, buf);
   int result = pqcrystals_dilithium2_ref_signature(sig, &siglen, buf, len, secret_key);
-  //ASSERT(0, "sign: sign completed");
 
   ASSERT(siglen == pqcrystals_dilithium2_BYTES, "sign: signature has unexpected length");
-  if (result) {
-    return result;
-  }
-
-  size_t bytes_sent = 0;
-  size_t bytes_left = pqcrystals_dilithium2_BYTES - bytes_sent;
-  while (bytes_sent < pqcrystals_dilithium2_BYTES) {
-    size_t next_packet_length = bytes_left >= MAX_PAYLOAD_LENGTH ? MAX_PAYLOAD_LENGTH : bytes_left;
-    simpleserial_put('r', next_packet_length, sig + bytes_sent);
-
-    bytes_sent += next_packet_length;
-    bytes_left -= next_packet_length;
-    if (bytes_left) { // only when we are not done yet, because returning will send a packet as well
-      uint8_t good_ret[1] = {0x00};
-      simpleserial_put('z', 1, good_ret); // we have to ack so that we can use simpleserial_read properly, i.e. with acks
-    }
-  }
-
-  return 0x00;
+  return result; // 0 == success
 }
 
 uint8_t get_sig(uint8_t cmd, uint8_t scmd, uint8_t len, uint8_t *buf) {
