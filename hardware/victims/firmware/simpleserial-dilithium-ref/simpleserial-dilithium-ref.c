@@ -26,14 +26,19 @@
 #include "simpleserial.h"
 
 #include "dilithium/ref/api.h"
+#include "dilithium/ref/params.h"
 #include "dilithium/ref/randombytes.h"
 
-uint8_t alg = 3;
+uint8_t alg = 0;
 uint8_t secret_key[pqcrystals_dilithium5_SECRETKEYBYTES];
 uint16_t secret_key_length = 0;
 
 uint8_t seed[MAX_PAYLOAD_LENGTH];
 uint8_t seed_length = 0;
+
+// used in sign function
+uint8_t sig[CRYPTO_BYTES];
+size_t siglen;
 
 #define ASSERT(cond, msg) do \
 { \
@@ -74,8 +79,8 @@ uint8_t reset(uint8_t* x, uint8_t len)
 	return 0x00;
 }
 
-uint16_t get_key_length(void) {
-  switch (alg) {
+uint16_t get_key_length(uint8_t algorithm) {
+  switch (algorithm) {
     case 2:
       return pqcrystals_dilithium2_SECRETKEYBYTES;
     case 3:
@@ -86,11 +91,23 @@ uint16_t get_key_length(void) {
   return 0;
 }
 
+uint16_t get_sig_length(uint8_t algorithm) {
+  switch (algorithm) {
+    case 2:
+      return 2420;
+    case 3:
+      return 3293;
+    case 5:
+      return 4595;
+  }
+  return 0;
+}
+
 uint8_t set_key(uint8_t cmd, uint8_t scmd, uint8_t len, uint8_t *buf) {
   ASSERT(cmd == CMD_SET_KEY, "set_key: invalid cmd");
   ASSERT(alg != 0, "set_key: alg not specified");
 
-  uint16_t key_length = get_key_length();
+  uint16_t key_length = get_key_length(alg);
   uint8_t last_scmd = key_length / MAX_PAYLOAD_LENGTH;
   uint8_t does_divide = !(key_length % MAX_PAYLOAD_LENGTH);
   if (does_divide) {
@@ -120,7 +137,8 @@ uint8_t set_seed(uint8_t cmd, uint8_t scmd, uint8_t len, uint8_t *buf) {
 }
 
 uint8_t set_alg(uint8_t cmd, uint8_t scmd, uint8_t len, uint8_t *buf) {
-  uint8_t ok_msg[] = "set_alg ok: 0";
+//  uint8_t ok_msg[] = "set_alg ok: 0HelloHello";
+  uint8_t ok_msg[] = "set_alg ok: 0HelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHello";
 
   ASSERT(cmd == CMD_SET_ALG, "set_alg: invalid cmd");
   ASSERT(scmd == 0, "set_alg: invalid scmd");
@@ -129,37 +147,82 @@ uint8_t set_alg(uint8_t cmd, uint8_t scmd, uint8_t len, uint8_t *buf) {
   ASSERT(new_alg == 2 || new_alg == 3 || new_alg == 5, "invalid alg for set_alg");
 
   alg = new_alg;
-  ok_msg[sizeof(ok_msg) - 2] += new_alg;
-  simpleserial_put('r', sizeof(ok_msg) - 1, ok_msg);
+  ok_msg[12] += new_alg;
+  simpleserial_put('r', MAX_PAYLOAD_LENGTH, ok_msg);
+  return 0x00;
+}
+
+uint8_t sign(uint8_t cmd, uint8_t scmd, uint8_t len, uint8_t *buf) {
+  ASSERT(cmd == CMD_SIGN, "sign: invalid cmd");
+  ASSERT(scmd == 0, "sign: invalid scmd");
+  ASSERT(alg != 0, "sign: alg not set");
+
+  //uint8_t deb[] = "0MESGLEN";
+  //deb[0] += len;
+  //simpleserial_put('a', sizeof(deb), deb);
+  //simpleserial_put('a', len, buf);
+  int result = pqcrystals_dilithium2_ref_signature(sig, &siglen, buf, len, secret_key);
+  //ASSERT(0, "sign: sign completed");
+
+  ASSERT(siglen == pqcrystals_dilithium2_BYTES, "sign: signature has unexpected length");
+  if (result) {
+    return result;
+  }
+
+  size_t bytes_sent = 0;
+  size_t bytes_left = pqcrystals_dilithium2_BYTES - bytes_sent;
+  while (bytes_sent < pqcrystals_dilithium2_BYTES) {
+    size_t next_packet_length = bytes_left >= MAX_PAYLOAD_LENGTH ? MAX_PAYLOAD_LENGTH : bytes_left;
+    simpleserial_put('r', next_packet_length, sig + bytes_sent);
+
+    bytes_sent += next_packet_length;
+    bytes_left -= next_packet_length;
+    if (bytes_left) { // only when we are not done yet, because returning will send a packet as well
+      uint8_t good_ret[1] = {0x00};
+      simpleserial_put('z', 1, good_ret); // we have to ack so that we can use simpleserial_read properly, i.e. with acks
+    }
+  }
+
+  return 0x00;
+}
+
+uint8_t get_sig(uint8_t cmd, uint8_t scmd, uint8_t len, uint8_t *buf) {
+  size_t sig_len = get_sig_length(alg);
+  size_t num_packets;
+  size_t last_packet_len;
+
+  if (sig_len % MAX_PAYLOAD_LENGTH) { // does not divide
+    num_packets = sig_len / MAX_PAYLOAD_LENGTH + 1;
+    last_packet_len = sig_len % MAX_PAYLOAD_LENGTH;
+  } else { // does divide
+    num_packets = sig_len / MAX_PAYLOAD_LENGTH;
+    last_packet_len = MAX_PAYLOAD_LENGTH;
+  }
+
+  ASSERT(scmd < num_packets, "get_sig: scmd out of range"); // prevent buffer overflow
+
+  if (scmd == num_packets - 1) { // last packet
+    simpleserial_put('r', last_packet_len, sig + scmd * MAX_PAYLOAD_LENGTH);
+    return 0x00;
+  }
+  // not last packet; but valid scmd as of previous assert
+  simpleserial_put('r', MAX_PAYLOAD_LENGTH, sig + scmd * MAX_PAYLOAD_LENGTH);
   return 0x00;
 }
 
 int main(void)
 {
-    platform_init();
-	init_uart();
-	trigger_setup();
+  platform_init();
+  init_uart();
+  trigger_setup();
 
- 	/* Uncomment this to get a HELLO message for debug */
-	/*
-	putch('h');
-	putch('e');
-	putch('l');
-	putch('l');
-	putch('o');
-	putch('\n');
-	*/
+  simpleserial_init();
+  simpleserial_addcmd(CMD_SET_ALG, 1, set_alg);
+  simpleserial_addcmd(CMD_SET_SEED, MAX_PAYLOAD_LENGTH, set_seed);
+  simpleserial_addcmd(CMD_SET_KEY, MAX_PAYLOAD_LENGTH, set_key);
+  simpleserial_addcmd(CMD_SIGN, MAX_PAYLOAD_LENGTH, sign);
+  simpleserial_addcmd(CMD_GET_SIG, MAX_PAYLOAD_LENGTH, get_sig);
 
-	simpleserial_init();
-#if SS_VER != SS_VER_2_1
-	simpleserial_addcmd('p', 16, get_pt);
-	simpleserial_addcmd('k', 16, get_key);
-	simpleserial_addcmd('x', 0, reset);
-#else
-    simpleserial_addcmd(CMD_SET_ALG, 1, set_alg);
-    simpleserial_addcmd(CMD_SET_SEED, MAX_PAYLOAD_LENGTH, set_seed);
-
-#endif
-	while(1)
-		simpleserial_get();
+  while(1)
+    simpleserial_get();
 }

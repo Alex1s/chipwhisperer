@@ -1,8 +1,10 @@
-#define MAX_PAYLOAD_LENGTH (249)
+#define MAX_PAYLOAD_LENGTH (128)
 
 #define CMD_SET_KEY ('k')
 #define CMD_SET_ALG ('q')
 #define CMD_SET_SEED ('s')
+#define CMD_SIGN ('e')
+#define CMD_GET_SIG ('g')
 
 #define SUBCOMMAND_LENGTH (255 - 1)
 #define SUBCOMMAND_COMMIT (255)
