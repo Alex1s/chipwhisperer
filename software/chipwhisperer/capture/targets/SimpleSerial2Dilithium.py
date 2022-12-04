@@ -16,31 +16,39 @@ class TargetIOError(BlockingIOError):
         return self.__data
 
     def __init__(self, message: str, data):
-        super(TargetIOError, self).__init__(message)
+        super().__init__(message)
         self.__data = data
+
+class TargetTimeoutError(TargetIOError):
+    def __init__(self):
+        super().__init__('Target cleanly timed out while generating a signature', b'')
 
 
 class LogToExceptionHandler(logging.NullHandler):
     def __init__():
-        super(LogToExceptionHandler, self).__init__()
+        super().__init__()
         self.setLevel(logging.NOTSET)
 
     @property
     def warning_or_higher_logged(self) -> bool:
         return self.__warning_or_higher_logged
 
-    @warning_or_higher_logged.setter
-    def warning_or_higher_logged(self, value: bool) -> None:
-        if type(value) is not bool:
-            raise ValueError(f'warning_or_higher_logged has to by of type bool; got: {type(value)}')
-        self.__warning_or_higher_logged = value
+    @property
+    def records_warning_or_higher(self) -> list:
+        return [record for record in self.__records_warning_or_higher]
+
+    def reset(self) -> None:
+        self.__warning_or_higher_logged = False
+        self.__records_warning_or_higher = []
 
     def __init__(self):
-        __warning_or_higher_logged = False
+        self.__warning_or_higher_logged = False
+        self.__records_warning_or_higher = []
 
     def handle(self, record):
         if record.levelno >= logging.WARNING:
             self.__warning_or_higher_logged = True
+            self.__records_warning_or_higher += [record]
 
 class SimpleSerial2Dilithium(SimpleSerial2):
     __handler = LogToExceptionHandler()
@@ -143,7 +151,7 @@ class SimpleSerial2Dilithium(SimpleSerial2):
         assert s is not None
         self.__scope = s
         
-    def sign(self, message: bytesm timeout: int = 10000) -> None:
+    def sign(self, message: bytes, timeout: int = 10000) -> None:
         ok_reply = b'sign ok'
         if len(message) > self.__MAX_PAYLOAD_LENGTH:
             raise ValueError()
@@ -160,16 +168,28 @@ class SimpleSerial2Dilithium(SimpleSerial2):
         dat += self.simpleserial_cmd_until_success(self.__COMMAND_GET_SIGN, num_packets - 1, b'\xAA', cmd_read='r', pay_len=len_last_packet)
         return dat
 
+    def read_until_blocking(self, pattern: bytes, timeout=1000) -> bytes:
+        """yes, blocking; so that it is fast"""
+        buf = b''
+        start = time.time()
+        while time.time() - start < timeout / 1000:
+            onecharstring = self.read(num_char=1, timeout=1)
+            assert type(onecharstring) is str
+            assert len(onecharstring) in [0, 1]
+            for char in onecharstring:
+                buf += bytes([ord(char)]) # is that the correct way to convert that string? why is it even a string -,-
+                if buf.endswith(pattern):
+                    return buf
+        raise TimeoutError(f'read_until_blocking timed out after {time.time() - start} s. (timeout={timeout / 1000})')
+
     def reboot_flush(self):
         self.scope.io.nrst = False
         time.sleep(0.05)
         self.scope.io.nrst = "high_z"
-        time.sleep(0.05)
-        #Flush garbage too
-        self.flush()
-        
-    
-    
+        # why is the overhead byte \x0b? Is it always that value? We will see ...
+        data_read = self.read_until_blocking(b'\x0bb\x07boot ok\xc1\x00') # simpleserial_put('b', sizeof("boot ok") - 1, "boot ok");
+        return data_read
+
     def check_error_rate(self, n: int) -> List[int]:
         assert n > 0
         expected = b'set_alg ok: 3' + 100 * b'Hello'
@@ -207,9 +227,12 @@ class SimpleSerial2Dilithium(SimpleSerial2):
         return dist
     
     def simpleserial_read(self, cmd=None, pay_len=None, end='\n', timeout=250, ack=True):
-        self.__handler.warning_or_higher_logged = False
+        self.__handler.reset()
         ret = super(SimpleSerial2Dilithium, self).simpleserial_read(cmd=cmd, pay_len=pay_len, end=end, timeout=timeout, ack=ack)
         if self.__handler.warning_or_higher_logged:
+            # let us somehow classify these error ffs -,-
+            if len(self.__handler.records_warning_or_higher) == 1 and self.__handler.records_warning_or_higher[0].msg == 'Read timed out: ':
+                raise TargetTimeoutError()
             raise TargetIOError('target logger logged a warning during simpleserial_read', ret)
         return ret
 
@@ -223,8 +246,20 @@ class SimpleSerial2Dilithium(SimpleSerial2):
                 self.__logger.info(f'got an BlockingIOError exception: {e}; trying again ...')
                 self.flush()
 
+    def filter_msgs_one_iter(self, messages: [bytes], threshold: int = 700):
+        good_messages = []
+        for message in messages:
+            try:
+                self.sign(message, timeout=threshold)
+                good_messages += [message]
+            except TargetTimeoutError as e:
+                print(e)
+                print('Continuing, all fine ...')
+                self.reboot_flush()
+        return good_messages
+
     def __init__(self, scope = None, algorithm: int = 2, secret_key: bytes = None):
-        SimpleSerial2.__init__(self)
+        super().__init__()
         
         self.__scope = None
         self.__algorithm = algorithm

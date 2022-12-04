@@ -203,6 +203,8 @@ int main(void)
   simpleserial_addcmd(CMD_SIGN, MAX_PAYLOAD_LENGTH, sign);
   simpleserial_addcmd(CMD_GET_SIG, MAX_PAYLOAD_LENGTH, get_sig);
 
+  // signal up and running
+  simpleserial_put('b', sizeof("boot ok") - 1, "boot ok");
   while(1)
     simpleserial_get();
 }
