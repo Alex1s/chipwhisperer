@@ -6,9 +6,8 @@ from typing import List
 import numpy as np
 import logging
 import math
-dilithium = importlib.import_module("python-dilithium.dilithium")
-dilithium.generic = importlib.import_module("python-dilithium.dilithium.generic")
-dilithium_params = dilithium.__params
+from dilithium import _params as dilithium_params # is "python-dilithium" in path?
+from dilithium import Dilithium # is "python-dilithium" in path?
 
 class TargetIOError(BlockingIOError):
     @property
@@ -59,53 +58,14 @@ class SimpleSerial2Dilithium(SimpleSerial2):
     __COMMAND_SET_SECRET_KEY = 'k'
     __COMMAND_SIGN = 'e'
     __COMMAND_GET_SIGN = 'g'
+    __COMMAND_LOOP = 'l'
+    __COMMAND_GET_POLY = 'n'
     __FIRST_ERR_RATE_PAYLOAD249_ITER100 = [ 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 1., 1., 1., 3., 3., 19., 12., 11., 7., 10., 5., 5., 9., 2., 4., 2., 1., 0., 1., 0., 0., 0., 2., 0., 0., 0., 0., 0., 0., 0., 1., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.]
     __FIRST_ERROR_RATE_PAYLOAD128_ITER10000 = [0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 1., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 1., 0., 0., 0., 0., 0., 0., 0., 0., 0., 1., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 1., 0., 0., 0., 0., 1., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.]
     __FIRST_ERROR_RATE_PAYLOAD128_ITER100000 = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 1, 0, 0, 0, 0, 2, 0, 1, 3, 0, 1, 1, 1, 0, 0, 0, 0, 0, 3, 0, 1, 0, 2, 0, 0, 2, 1, 0, 0, 0, 1, 0, 0, 1, 0, 2, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0]
     # 100 Dilithium (2) signature timings in seconds of messages (0x0000 - 0x0064)
     __SIG_TIMINGS = [1.8345985412597656, 0.571202278137207, 0.5727174282073975, 2.44435453414917, 1.9954373836517334, 1.956618309020996, 1.0284478664398193, 0.5720925331115723, 1.0222575664520264, 0.5756478309631348, 3.327014446258545, 1.1550006866455078, 3.5656371116638184, 1.4125359058380127, 1.2258155345916748, 0.5754551887512207, 0.5706188678741455, 2.6741480827331543, 1.2207884788513184, 0.569699764251709, 1.8295707702636719, 2.4150185585021973, 2.5315682888031006, 1.6380705833435059, 0.5689265727996826, 0.7610783576965332, 0.800501823425293, 2.897522211074829, 1.539381504058838, 1.148653507232666, 0.5714447498321533, 2.256739377975464, 0.795245885848999, 0.956822395324707, 0.5665726661682129, 0.5721073150634766, 1.150632381439209, 1.2155184745788574, 1.6022050380706787, 0.9530470371246338, 0.7947635650634766, 1.220771312713623, 1.7636890411376953, 0.7999839782714844, 2.0266835689544678, 2.9747705459594727, 1.5745739936828613, 0.5741910934448242, 1.4473426342010498, 1.153580665588379, 0.5740790367126465, 0.7645726203918457, 0.5718286037445068, 3.671562433242798, 1.5743498802185059, 2.4453606605529785, 0.5700263977050781, 0.7969129085540771, 0.5690975189208984, 1.2237257957458496, 0.571495532989502, 0.9935479164123535, 0.7666583061218262, 1.0304381847381592, 0.8014285564422607, 0.5709078311920166, 0.7657623291015625, 0.7964329719543457, 1.832737922668457, 0.5714242458343506, 1.1860861778259277, 0.571995735168457, 0.7650182247161865, 1.0285441875457764, 2.029315710067749, 0.987626314163208, 0.7646205425262451, 2.2466177940368652, 1.6047735214233398, 0.7635841369628906, 0.5692150592803955, 0.7618019580841064, 1.6753244400024414, 0.9920835494995117, 0.5694153308868408, 0.7975795269012451, 1.4073009490966797, 2.9902737140655518, 0.5741786956787109, 0.8005082607269287, 2.445647716522217, 0.5705244541168213, 0.993781566619873, 0.7978324890136719, 3.0634548664093018, 0.7647135257720947, 0.7613015174865723, 1.8281018733978271, 0.5725083351135254, 0.993952751159668]
 
-    def __send_cmd_long(self, command: str, payload: bytes, timeout: int = 2000) -> None:
-        assert len(command) == 1
-        
-        bytes_sent = 0
-        bytes_left = len(payload)
-        for i in range(9999999):
-            next_packet_len = self.__MAX_PAYLOAD_LENGTH if bytes_left > self.__MAX_PAYLOAD_LENGTH else bytes_left
-            if next_packet_len == 0:
-                break
-            next_packet = payload[i * self.__MAX_PAYLOAD_LENGTH:i * self.__MAX_PAYLOAD_LENGTH + next_packet_len]
-            
-            self.send_cmd(command, i, next_packet)
-            response = self.simpleserial_read(cmd='r', timeout=timeout)
-            assert response == b'ok', f'received error: {bytes(response)} at packet {i} with len {next_packet_len}'
-
-            bytes_sent += next_packet_len
-            bytes_left -= next_packet_len
-
-    def __simpleserial_read_long(self, length: int, command: str = None, timeout: int = 2000) -> bytes:
-        if command is not None:
-            assert len(command) == 1
-            
-        num_full_reads = length // self.__MAX_PAYLOAD_LENGTH
-        length_last_read = length % self.__MAX_PAYLOAD_LENGTH
-            
-        buf = b''
-        for i in range(num_full_reads):
-            reply = self.simpleserial_read(cmd=command, timeout=timeout)
-            assert reply is not None, f'i={i}; num_full_reads={num_full_reads}'
-            assert len(reply) == self.__MAX_PAYLOAD_LENGTH
-            buf += reply
-        
-        reply = self.simpleserial_read(cmd=command, timeout=timeout)
-        assert reply is not None
-        assert len(reply) == length_last_read
-        buf += reply
-        
-        assert len(buf) == length
-        
-        return buf
-    
     
     @property
     def algorithm(self) -> int:
@@ -132,6 +92,10 @@ class SimpleSerial2Dilithium(SimpleSerial2):
     @property
     def crypto_bytes(self) -> int:
         return dilithium_params[self.__algorithm]['CRYPTO_BYTES']
+
+    @property
+    def polyz_packedbytes(self) -> int:
+        return dilithium_params[self.__algorithm]['POLYZ_PACKEDBYTES']
     
     @secret_key.setter
     def secret_key(self, s: bytes):
@@ -159,6 +123,28 @@ class SimpleSerial2Dilithium(SimpleSerial2):
         reply = self.simpleserial_read('r', len(ok_reply), timeout=timeout)
         assert reply == ok_reply
 
+    def loop_send(self) -> None:
+        self.send_cmd(self.__COMMAND_LOOP, 0, b'')
+
+    def loop_recv(self, timeout=10) -> None:
+        ok_reply = b'loop ok'
+        reply = self.simpleserial_read('r', len(ok_reply), timeout=timeout)
+        if reply != ok_reply:
+            raise TargetIOError(f'Did not receive expected reply "{ok_reply} but instead got {reply}."', reply)
+
+    def loop(self, timeout: int = 100) -> None:
+        self.loop_send()
+        self.loop_recv(timeout=timeout)
+
+    def get_poly(self, max_num_retries: int = None) -> bytes:
+        num_packets = math.ceil(self.polyz_packedbytes / self.__MAX_PAYLOAD_LENGTH)
+        len_last_packet = self.polyz_packedbytes % self.__MAX_PAYLOAD_LENGTH if self.polyz_packedbytes % self.__MAX_PAYLOAD_LENGTH else self.__MAX_PAYLOAD_LENGTH
+        dat = b''
+        for i in range(num_packets - 1):
+            dat += self.simpleserial_cmd_until_success(self.__COMMAND_GET_POLY, i, b'\xAA', cmd_read='r', pay_len=self.__MAX_PAYLOAD_LENGTH, max_num_retries=max_num_retries)
+        dat += self.simpleserial_cmd_until_success(self.__COMMAND_GET_POLY, num_packets - 1, b'\xAA', cmd_read='r', pay_len=len_last_packet)
+        return dat
+
     def get_sig(self) -> bytes:
         num_packets = math.ceil(self.crypto_bytes / self.__MAX_PAYLOAD_LENGTH)
         len_last_packet = self.crypto_bytes % self.__MAX_PAYLOAD_LENGTH if self.crypto_bytes % self.__MAX_PAYLOAD_LENGTH else self.__MAX_PAYLOAD_LENGTH
@@ -180,14 +166,14 @@ class SimpleSerial2Dilithium(SimpleSerial2):
                 buf += bytes([ord(char)]) # is that the correct way to convert that string? why is it even a string -,-
                 if buf.endswith(pattern):
                     return buf
-        raise TimeoutError(f'read_until_blocking timed out after {time.time() - start} s. (timeout={timeout / 1000})')
+        raise TimeoutError(f'read_until_blocking timed out after {time.time() - start} s. (timeout={timeout / 1000}). Read until now: {buf}')
 
-    def reboot_flush(self):
+    def reboot_flush(self, timeout=2000):
         self.scope.io.nrst = False
         time.sleep(0.05)
         self.scope.io.nrst = "high_z"
         # why is the overhead byte \x0b? Is it always that value? We will see ...
-        data_read = self.read_until_blocking(b'\x0bb\x07boot ok\xc1\x00') # simpleserial_put('b', sizeof("boot ok") - 1, "boot ok");
+        data_read = self.read_until_blocking(b'\x0bb\x07boot ok\xc1\x00', timeout=timeout) # simpleserial_put('b', sizeof("boot ok") - 1, "boot ok");
         return data_read
 
     def check_error_rate(self, n: int) -> List[int]:
@@ -233,18 +219,21 @@ class SimpleSerial2Dilithium(SimpleSerial2):
             # let us somehow classify these error ffs -,-
             if len(self.__handler.records_warning_or_higher) == 1 and self.__handler.records_warning_or_higher[0].msg == 'Read timed out: ':
                 raise TargetTimeoutError()
-            raise TargetIOError('target logger logged a warning during simpleserial_read', ret)
+            raise TargetIOError(f'target logger logged a warning during simpleserial_read: {[r.msg for r in self.__handler.records_warning_or_higher]}', ret)
         return ret
 
-    def simpleserial_cmd_until_success(self, cmd, scmd, data, cmd_read=None, pay_len=None, end='\n', timeout=250, ack=True):
-        while True:
+    def simpleserial_cmd_until_success(self, cmd, scmd, data, cmd_read=None, pay_len=None, end='\n', timeout=250, ack=True, max_num_retries : int = None):
+        num_retries = 0
+        while max_num_retries is None or num_retries < max_num_retries:
             try:
                 self.send_cmd(cmd, scmd, data)
                 ret = self.simpleserial_read(cmd=cmd_read, pay_len=pay_len, end=end, timeout=timeout, ack=ack)
                 return ret
             except TargetIOError as e:
                 self.__logger.info(f'got an BlockingIOError exception: {e}; trying again ...')
+                num_retries += 1
                 self.flush()
+        raise TargetIOError(f'Giving up reading from target after {num_retries} failed attempts.');
 
     def filter_msgs_one_iter(self, messages: [bytes], threshold: int = 700):
         good_messages = []
@@ -264,11 +253,12 @@ class SimpleSerial2Dilithium(SimpleSerial2):
         self.__scope = None
         self.__algorithm = algorithm
         self.algorithm = algorithm
+        self.__d = Dilithium(self.algorithm)
         # self.__crypto_bytes = dilithium_params[self.__algorithm]['CRYPTO_SERETKEYBTES']
         
         if secret_key is None:
-            dilithium.generic.pseudorandombytes_seed(b'attack-shuffling-countermeasure-keypair')
-            public_key, secret_key = dilithium.generic.keypair(nist_security_level=self.algorithm)
+            self.__d.pseudorandombytes_seed(b'attack-shuffling-countermeasure-keypair')
+            public_key, secret_key = self.__d.keypair()
         self.__secret_key = None
         self.secret_key = secret_key
         
