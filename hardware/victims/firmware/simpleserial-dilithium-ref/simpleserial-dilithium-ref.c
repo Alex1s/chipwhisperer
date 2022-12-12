@@ -28,11 +28,13 @@
 #include "dilithium/ref/api.h"
 #include "dilithium/ref/params.h"
 #include "dilithium/ref/randombytes.h"
+#include "dilithium/ref/poly.h"
 
 
 uint8_t alg = DILITHIUM_MODE;
 uint8_t secret_key[pqcrystals_dilithium5_SECRETKEYBYTES + 10] = DEFAULT_SECRET_KEY ;
 uint16_t secret_key_length = 0;
+uint8_t poly_packed[] = POLY_PACKED;
 
 uint8_t seed[MAX_PAYLOAD_LENGTH];
 uint8_t seed_length = 0;
@@ -40,6 +42,9 @@ uint8_t seed_length = 0;
 // used in sign function
 uint8_t sig[CRYPTO_BYTES];
 size_t siglen;
+
+poly poly_unpacked;
+uint8_t poly_packed[POLYZ_PACKEDBYTES];
 
 #define ASSERT(cond, msg) do \
 { \
@@ -190,6 +195,46 @@ uint8_t get_sig(uint8_t cmd, uint8_t scmd, uint8_t len, uint8_t *buf) {
   return 0x00;
 }
 
+uint8_t loop(uint8_t cmd, uint8_t scmd, uint8_t len, uint8_t *buf) {
+    ASSERT(cmd == CMD_LOOP, "loop: cmd");
+    ASSERT(scmd == 0, "loop: scmd");
+    ASSERT(len == 0, "loop: len");
+
+    // mem is assumed to be zero
+    memset(&poly_unpacked, 0, sizeof(poly_unpacked));
+
+    polyz_unpack(&poly_unpacked, poly_packed); // secret key should be a big enough deterministic buffer I assume ...
+    // pack again for faster transmission
+    polyz_pack(poly_packed, &poly_unpacked);
+
+  simpleserial_put('r', sizeof("loop ok") - 1, "loop ok");
+
+    return 0x00;
+}
+
+uint8_t get_poly(uint8_t cmd, uint8_t scmd, uint8_t len, uint8_t *buf) {
+  size_t num_packets;
+  size_t last_packet_len;
+
+  if (POLYZ_PACKEDBYTES % MAX_PAYLOAD_LENGTH) { // does not divide
+    num_packets = POLYZ_PACKEDBYTES / MAX_PAYLOAD_LENGTH + 1;
+    last_packet_len = POLYZ_PACKEDBYTES % MAX_PAYLOAD_LENGTH;
+  } else { // does divide
+    num_packets = POLYZ_PACKEDBYTES / MAX_PAYLOAD_LENGTH;
+    last_packet_len = MAX_PAYLOAD_LENGTH;
+  }
+
+  ASSERT(scmd < num_packets, "get_poly: scmd out of range"); // prevent buffer overflow
+
+  if (scmd == num_packets - 1) { // last packet
+    simpleserial_put('r', last_packet_len, poly_packed + scmd * MAX_PAYLOAD_LENGTH);
+    return 0x00;
+  }
+  // not last packet; but valid scmd as of previous assert
+  simpleserial_put('r', MAX_PAYLOAD_LENGTH, poly_packed + scmd * MAX_PAYLOAD_LENGTH);
+  return 0x00;
+}
+
 int main(void)
 {
   platform_init();
@@ -202,6 +247,8 @@ int main(void)
   simpleserial_addcmd(CMD_SET_KEY, MAX_PAYLOAD_LENGTH, set_key);
   simpleserial_addcmd(CMD_SIGN, MAX_PAYLOAD_LENGTH, sign);
   simpleserial_addcmd(CMD_GET_SIG, MAX_PAYLOAD_LENGTH, get_sig);
+  simpleserial_addcmd(CMD_LOOP, 0, loop);
+  simpleserial_addcmd(CMD_GET_POLY, 0, get_poly);
 
   // signal up and running
   simpleserial_put('b', sizeof("boot ok") - 1, "boot ok");
