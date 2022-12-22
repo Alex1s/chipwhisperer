@@ -491,6 +491,7 @@ $(OBJDIR)/%.o : %.c
 	@$(ECHO_BLANK)
 	@echo Compiling:
 	@echo -en $(COMPMSG)
+	mkdir -p "$(shell dirname "$@")"
 	@$(CC) -c $(ALL_CFLAGS) $< -o $@
 	@echo -e $(DONEMSG)
 
