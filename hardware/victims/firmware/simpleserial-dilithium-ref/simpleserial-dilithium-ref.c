@@ -29,6 +29,7 @@
 #include "dilithium/ref/params.h"
 #include "dilithium/ref/randombytes.h"
 #include "dilithium/ref/poly.h"
+#include "dilithium/ref/polyvec.h"
 
 
 uint8_t alg = DILITHIUM_MODE;
@@ -212,6 +213,21 @@ uint8_t loop(uint8_t cmd, uint8_t scmd, uint8_t len, uint8_t *buf) {
     return 0x00;
 }
 
+uint8_t vec(uint8_t cmd, uint8_t scmd, uint8_t len, uint8_t *buf) {
+  ASSERT(cmd == CMD_VEC, "vec: cmd");
+  ASSERT(scmd == 0, "vec: scmd");
+  ASSERT(len == 0, "vec: len");
+
+  polyvecl y = {};
+  uint8_t seed[CRHBYTES] = {};
+  uint16_t nonce = 0;
+  int res = polyvecl_uniform_gamma1(&y, seed, nonce);
+
+  simpleserial_put('r', sizeof("vec ok") - 1, "vec ok");
+
+  return res;
+}
+
 uint8_t get_poly(uint8_t cmd, uint8_t scmd, uint8_t len, uint8_t *buf) {
   size_t num_packets;
   size_t last_packet_len;
@@ -249,6 +265,7 @@ int main(void)
   simpleserial_addcmd(CMD_GET_SIG, MAX_PAYLOAD_LENGTH, get_sig);
   simpleserial_addcmd(CMD_LOOP, 0, loop);
   simpleserial_addcmd(CMD_GET_POLY, 0, get_poly);
+  simpleserial_addcmd(CMD_VEC, 0, vec);
 
   // signal up and running
   simpleserial_put('b', sizeof("boot ok") - 1, "boot ok");

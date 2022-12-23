@@ -7,6 +7,7 @@
 #define CMD_GET_SIG ('g')
 #define CMD_LOOP ('l')
 #define CMD_GET_POLY ('n')
+#define CMD_VEC ('y')
 
 #define SUBCOMMAND_LENGTH (255 - 1)
 #define SUBCOMMAND_COMMIT (255)
