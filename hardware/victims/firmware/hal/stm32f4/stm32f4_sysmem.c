@@ -45,6 +45,10 @@
 *****************************************************************************
 */
 
+#ifndef caddr_t
+#define caddr_t void*
+#endif
+
 /* Includes */
 #include <errno.h>
 #include <stdio.h>
