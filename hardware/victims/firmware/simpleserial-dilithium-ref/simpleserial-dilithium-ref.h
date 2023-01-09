@@ -2,7 +2,6 @@
 
 #define CMD_SET_KEY ('k')
 #define CMD_SET_ALG ('q')
-#define CMD_SET_SEED ('s')
 #define CMD_SIGN ('e')
 #define CMD_GET_SIG ('g')
 #define CMD_LOOP ('l')
