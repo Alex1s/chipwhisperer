@@ -43,6 +43,10 @@ SRC += simpleserial-dilithium-ref.c $(DILITHIUM_RANDOMBYTES_SOURCES)
 
 # -----------------------------------------------------------------------------
 
+ifeq ($(SS_VER),)
+SS_VER = SS_VER_2_1
+endif
+
 ifeq ($(PLATFORM),)
 PLATFORM = CW308_STM32F4
 endif
