@@ -32,14 +32,12 @@
 # This is the name of the compiled .hex file.
 TARGET = simpleserial-dilithium-ref
 
-CDEFS += -DDILITHIUM_MODE=2 # fixed for now; make variabe later ...?
 DILITHIUM_SOURCES = dilithium/ref/sign.c dilithium/ref/packing.c dilithium/ref/polyvec.c dilithium/ref/poly.c dilithium/ref/ntt.c dilithium/ref/reduce.c dilithium/ref/rounding.c
-DILITHIUM_KECCAK_SOURCES = $(DILITHIUM_SOURCES) dilithium/ref/fips202.c dilithium/ref/symmetric-shake.c
-DILITHIUM_RANDOMBYTES_SOURCES = $(DILITHIUM_KECCAK_SOURCES) dilithium/ref/randombytes.c
+DILITHIUM_FIPS202_SRCS= $(DILITHIUM_SOURCES) dilithium/ref/symmetric-shake.c
 
 # List C source files here.
 # Header files (.h) are automatically pulled in.
-SRC += simpleserial-dilithium-ref.c $(DILITHIUM_RANDOMBYTES_SOURCES) 
+SRC += simpleserial-dilithium-ref.c $(DILITHIUM_FIPS202_SRCS) dilithium/ref/fips202.c
 
 # -----------------------------------------------------------------------------
 
