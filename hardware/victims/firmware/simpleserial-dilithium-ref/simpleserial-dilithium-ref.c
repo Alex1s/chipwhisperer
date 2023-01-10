@@ -37,9 +37,6 @@ uint8_t secret_key[pqcrystals_dilithium5_SECRETKEYBYTES + 10] = DEFAULT_SECRET_K
 uint16_t secret_key_length = 0;
 uint8_t poly_packed[] = POLY_PACKED;
 
-uint8_t seed[MAX_PAYLOAD_LENGTH];
-uint8_t seed_length = 0;
-
 // used in sign function
 uint8_t sig[CRYPTO_BYTES];
 size_t siglen;
@@ -128,18 +125,6 @@ uint8_t set_key(uint8_t cmd, uint8_t scmd, uint8_t len, uint8_t *buf) {
   }
   memcpy(secret_key + MAX_PAYLOAD_LENGTH * scmd, buf, len);
   simpleserial_put('r', sizeof("ok") - 1, "ok");
-  return 0x00;
-}
-
-uint8_t set_seed(uint8_t cmd, uint8_t scmd, uint8_t len, uint8_t *buf) {
-  uint8_t ok_msg[13 + MAX_PAYLOAD_LENGTH + 1] = "set_seed ok: ";
-  ASSERT(cmd == CMD_SET_SEED, "set_seed: invalid cmd");
-  ASSERT(scmd == 0, "set_seed: invalid scmd");
-  ASSERT(len <= MAX_PAYLOAD_LENGTH, "set_seed: invalid len");
-  memcpy(seed, buf, len);
-  memcpy(ok_msg + 13, buf, len);
-  simpleserial_put('r', 13 + len, ok_msg);
-  pseudorandombytes_seed(buf, len);
   return 0x00;
 }
 
@@ -259,7 +244,6 @@ int main(void)
 
   simpleserial_init();
   simpleserial_addcmd(CMD_SET_ALG, 1, set_alg);
-  simpleserial_addcmd(CMD_SET_SEED, MAX_PAYLOAD_LENGTH, set_seed);
   simpleserial_addcmd(CMD_SET_KEY, MAX_PAYLOAD_LENGTH, set_key);
   simpleserial_addcmd(CMD_SIGN, MAX_PAYLOAD_LENGTH, sign);
   simpleserial_addcmd(CMD_GET_SIG, MAX_PAYLOAD_LENGTH, get_sig);
