@@ -41,20 +41,12 @@ SRC += simpleserial-dilithium-ref.c $(DILITHIUM_FIPS202_SRCS) dilithium/ref/fips
 
 # -----------------------------------------------------------------------------
 
-ifeq ($(SS_VER),)
 SS_VER = SS_VER_2_1
-endif
+CRYPTO_TARGET = NONE
+CRYPTO_OPTIONS = NONE
 
 ifeq ($(PLATFORM),)
 PLATFORM = CW308_STM32F4
-endif
-
-ifeq ($(CRYPTO_TARGET),)
-CRYPTO_TARGET = NONE
-endif
-
-ifeq ($(CRYPTO_OPTIONS),)
-CRYPTO_OPTIONS = NONE
 endif
 
 #Add simpleserial project to build
@@ -62,4 +54,3 @@ include ../simpleserial/Makefile.simpleserial
 
 FIRMWAREPATH = ../.
 include $(FIRMWAREPATH)/Makefile.inc
-
