@@ -31,18 +31,20 @@
 #include "dilithium/ref/poly.h"
 #include "dilithium/ref/polyvec.h"
 
+#define ENABLE_SIGNATURE
+//#define ENABLE_POLYZ_UNPACK
 
-uint8_t alg = DILITHIUM_MODE;
-uint8_t secret_key[pqcrystals_dilithium5_SECRETKEYBYTES + 10] = DEFAULT_SECRET_KEY ;
-uint16_t secret_key_length = 0;
-uint8_t poly_packed[] = POLY_PACKED;
-
-// used in sign function
+#ifdef ENABLE_SIGNATURE
+uint8_t secret_key[pqcrystals_dilithium5_SECRETKEYBYTES] = DEFAULT_SECRET_KEY;
 uint8_t sig[CRYPTO_BYTES];
-size_t siglen;
+#endif // ENABLE_SIGNATURE
 
+#ifdef ENABLE_POLYZ_UNPACK
+uint8_t poly_packed[] = POLY_PACKED;
 poly poly_unpacked;
-uint8_t poly_packed[POLYZ_PACKEDBYTES];
+#endif // ENABLE_POLYZ_UNPACK
+
+
 
 #define ASSERT(cond, msg) do \
 { \
@@ -52,103 +54,12 @@ uint8_t poly_packed[POLYZ_PACKEDBYTES];
   } \
 } while (0)
 
-uint8_t get_key(uint8_t* k, uint8_t len)
-{
-	// Load key here
-	return 0x00;
-}
-
-uint8_t get_pt(uint8_t* pt, uint8_t len)
-{
-	/**********************************
-	* Start user-specific code here. */
-	trigger_high();
-
-	//16 hex bytes held in 'pt' were sent
-	//from the computer. Store your response
-	//back into 'pt', which will send 16 bytes
-	//back to computer. Can ignore of course if
-	//not needed
-
-	trigger_low();
-	/* End user-specific code here. *
-	********************************/
-	simpleserial_put('r', 16, pt);
-	return 0x00;
-}
-
-uint8_t reset(uint8_t* x, uint8_t len)
-{
-	// Reset key here if needed
-	return 0x00;
-}
-
-uint16_t get_key_length(uint8_t algorithm) {
-  switch (algorithm) {
-    case 2:
-      return pqcrystals_dilithium2_SECRETKEYBYTES;
-    case 3:
-      return pqcrystals_dilithium3_SECRETKEYBYTES;
-    case 5:
-      return pqcrystals_dilithium5_SECRETKEYBYTES;
-  }
-  return 0;
-}
-
-uint16_t get_sig_length(uint8_t algorithm) {
-  switch (algorithm) {
-    case 2:
-      return 2420;
-    case 3:
-      return 3293;
-    case 5:
-      return 4595;
-  }
-  return 0;
-}
-
-uint8_t set_key(uint8_t cmd, uint8_t scmd, uint8_t len, uint8_t *buf) {
-  ASSERT(cmd == CMD_SET_KEY, "set_key: invalid cmd");
-  ASSERT(alg != 0, "set_key: alg not specified");
-
-  uint16_t key_length = get_key_length(alg);
-  uint8_t last_scmd = key_length / MAX_PAYLOAD_LENGTH;
-  uint8_t does_divide = !(key_length % MAX_PAYLOAD_LENGTH);
-  if (does_divide) {
-    last_scmd++;
-  }
-  ASSERT(scmd <= last_scmd, "set_key: scmd out of range");
-  if (does_divide || scmd < last_scmd) {
-    ASSERT(len == MAX_PAYLOAD_LENGTH, "set_key: invalid length");
-  } else if (scmd == last_scmd) {
-    ASSERT(len == key_length % MAX_PAYLOAD_LENGTH, "set_key: last scmd has invalid length");
-  }
-  memcpy(secret_key + MAX_PAYLOAD_LENGTH * scmd, buf, len);
-  simpleserial_put('r', sizeof("ok") - 1, "ok");
-  return 0x00;
-}
-
-uint8_t set_alg(uint8_t cmd, uint8_t scmd, uint8_t len, uint8_t *buf) {
-//  uint8_t ok_msg[] = "set_alg ok: 0HelloHello";
-  uint8_t ok_msg[] = "set_alg ok: 0HelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHello";
-
-  ASSERT(cmd == CMD_SET_ALG, "set_alg: invalid cmd");
-  ASSERT(scmd == 0, "set_alg: invalid scmd");
-  ASSERT(len == 1, "set_alg: invalid len");
-  uint8_t new_alg = *buf;
-  ASSERT(new_alg == 2 || new_alg == 3 || new_alg == 5, "invalid alg for set_alg");
-
-  alg = new_alg;
-  ok_msg[12] += new_alg;
-  simpleserial_put('r', MAX_PAYLOAD_LENGTH, ok_msg);
-  return 0x00;
-}
-
+#ifdef ENABLE_SIGNATURE
 uint8_t sign(uint8_t cmd, uint8_t scmd, uint8_t len, uint8_t *buf) {
+  size_t siglen;
+
   ASSERT(cmd == CMD_SIGN, "sign: invalid cmd");
   ASSERT(scmd == 0, "sign: invalid scmd");
-  ASSERT(alg != 0, "sign: alg not set");
-  ASSERT(alg == 2, "sign: alg has to be 2 as of now");
 
   int result = pqcrystals_dilithium2_ref_signature(sig, &siglen, buf, len, secret_key);
 
@@ -158,15 +69,14 @@ uint8_t sign(uint8_t cmd, uint8_t scmd, uint8_t len, uint8_t *buf) {
 }
 
 uint8_t get_sig(uint8_t cmd, uint8_t scmd, uint8_t len, uint8_t *buf) {
-  size_t sig_len = get_sig_length(alg);
   size_t num_packets;
   size_t last_packet_len;
 
-  if (sig_len % MAX_PAYLOAD_LENGTH) { // does not divide
-    num_packets = sig_len / MAX_PAYLOAD_LENGTH + 1;
-    last_packet_len = sig_len % MAX_PAYLOAD_LENGTH;
+  if (CRYPTO_BYTES % MAX_PAYLOAD_LENGTH) { // does not divide
+    num_packets = CRYPTO_BYTES / MAX_PAYLOAD_LENGTH + 1;
+    last_packet_len = CRYPTO_BYTES % MAX_PAYLOAD_LENGTH;
   } else { // does divide
-    num_packets = sig_len / MAX_PAYLOAD_LENGTH;
+    num_packets = CRYPTO_BYTES / MAX_PAYLOAD_LENGTH;
     last_packet_len = MAX_PAYLOAD_LENGTH;
   }
 
@@ -180,7 +90,9 @@ uint8_t get_sig(uint8_t cmd, uint8_t scmd, uint8_t len, uint8_t *buf) {
   simpleserial_put('r', MAX_PAYLOAD_LENGTH, sig + scmd * MAX_PAYLOAD_LENGTH);
   return 0x00;
 }
+#endif // ENABLE_SIGNATURE
 
+#ifdef ENABLE_POLYZ_UNPACK
 uint8_t loop(uint8_t cmd, uint8_t scmd, uint8_t len, uint8_t *buf) {
     ASSERT(cmd == CMD_LOOP, "loop: cmd");
     ASSERT(scmd == 0, "loop: scmd");
@@ -196,21 +108,6 @@ uint8_t loop(uint8_t cmd, uint8_t scmd, uint8_t len, uint8_t *buf) {
   simpleserial_put('r', sizeof("loop ok") - 1, "loop ok");
 
     return 0x00;
-}
-
-uint8_t vec(uint8_t cmd, uint8_t scmd, uint8_t len, uint8_t *buf) {
-  ASSERT(cmd == CMD_VEC, "vec: cmd");
-  ASSERT(scmd == 0, "vec: scmd");
-  ASSERT(len == 0, "vec: len");
-
-  polyvecl y = {};
-  uint8_t seed[CRHBYTES] = {};
-  uint16_t nonce = 0;
-  int res = polyvecl_uniform_gamma1(&y, seed, nonce);
-
-  simpleserial_put('r', sizeof("vec ok") - 1, "vec ok");
-
-  return res;
 }
 
 uint8_t get_poly(uint8_t cmd, uint8_t scmd, uint8_t len, uint8_t *buf) {
@@ -235,6 +132,7 @@ uint8_t get_poly(uint8_t cmd, uint8_t scmd, uint8_t len, uint8_t *buf) {
   simpleserial_put('r', MAX_PAYLOAD_LENGTH, poly_packed + scmd * MAX_PAYLOAD_LENGTH);
   return 0x00;
 }
+#endif // ENABLE_POLYZ_UNPACK
 
 int main(void)
 {
@@ -243,13 +141,16 @@ int main(void)
   trigger_setup();
 
   simpleserial_init();
-  simpleserial_addcmd(CMD_SET_ALG, 1, set_alg);
-  simpleserial_addcmd(CMD_SET_KEY, MAX_PAYLOAD_LENGTH, set_key);
+
+#ifdef ENABLE_SIGNATURE
   simpleserial_addcmd(CMD_SIGN, MAX_PAYLOAD_LENGTH, sign);
   simpleserial_addcmd(CMD_GET_SIG, MAX_PAYLOAD_LENGTH, get_sig);
+#endif // ENABLE_SIGNATURE
+
+#ifdef ENABLE_POLYZ_UNPACK
   simpleserial_addcmd(CMD_LOOP, 0, loop);
   simpleserial_addcmd(CMD_GET_POLY, 0, get_poly);
-  simpleserial_addcmd(CMD_VEC, 0, vec);
+#endif // ENABLE_POLYZ_UNPACK
 
   // signal up and running
   simpleserial_put('b', sizeof("boot ok") - 1, "boot ok");
