@@ -4,7 +4,7 @@ import chipwhisperer.capture.targets.SimpleSerial2 as SimpleSerial2
 import struct
 import importlib
 import time
-from typing import List
+from typing import List, Optional, Dict
 import numpy as np
 import logging
 import math
@@ -132,14 +132,16 @@ class SimpleSerial2Dilithium(SimpleSerial2):
         self.scope.cglitch_setup()  # default_setup for clock glitching
         self.scope.clock.adc_src = "clkgen_x1"  # scope.adc.trig_count will be in units of clock cycles
 
-    def run_without_glitch(self, action: callable) -> None:
+    def run_without_glitch(self, action: callable):
         self.scope.io.hs2 = "clkgen"  # disable glitch
         self.scope.sc.arm(False)  # reset trig_count
         self.scope.arm()
 
-        action()
+        res = action()
 
         self.scope.io.hs2 = "glitch"  # enable glitch
+
+        return res
 
     @property
     @functools.lru_cache(maxsize=None)  # replace with @functools.cache when switching to python3.9 or above
@@ -152,6 +154,69 @@ class SimpleSerial2Dilithium(SimpleSerial2):
         # this constant is great enough that it filters almost all false positives but
         # also always allows faults even in the last poly_index
         return self.loop_duration - 30
+
+    @property
+    @functools.lru_cache(maxsize=None)  # replace with @functools.cache when switching to python3.9 or above
+    def loop_duration_sign(self) -> int:
+        self.run_without_glitch(functools.partial(self.sign, b'\x01'))  # b'\x00' is not rejected
+        return math.ceil(self.scope.adc.trig_count // self.__d.l)
+
+    @property
+    def loop_duration_sign_threshold(self):
+        # this constant is great enough that it filters almost all false positives but
+        # also always allows faults even in the last poly_index
+        return self.loop_duration_sign - 30
+
+    @functools.lru_cache(maxsize=None)  # replace with @functools.cache when switching to python3.9 or above
+    def message_without_rejections(self, poly_index: Optional[int] = None) -> (bytes, bytes):
+        """Returns message, signature_packed"""
+        if poly_index is None:
+            poly_index = 1000  # this index is out of range thus it will not fault
+        message = None
+        signature_packed = None
+        for i in range(2 ** 16 - 1):
+            upper = i // 256
+            lower = i % 256
+            message = bytes([upper, lower])
+            signature_packed, num_rejections = self.__d.signature_faulted(message, self.secret_key, 0, poly_index)
+            if num_rejections != 0:
+                message = None
+                continue
+            else:
+                break
+        if message is None or signature_packed is None:
+            raise RuntimeException(
+                'We did not find a message without rejections searching two full bytes. While theoretically possible, it is more likely that the "signature_faulted" implementation is wrong.')
+        return message, signature_packed
+
+    @property
+    @functools.lru_cache(maxsize=None)  # replace with @functools.cache when switching to python3.9 or above
+    def signature_predictions(self) -> Dict:
+        signatures_map = {}
+        for poly_index in range(0, self.__d._polyz_unpack_num_iters):  # this loops includes a non-faulted signature
+            message, signature_packed = self.message_without_rejections(poly_index)
+            signatures_map[signature_packed] = message
+        return signatures_map
+
+    @property
+    @functools.lru_cache(maxsize=None)  # replace with @functools.cache when switching to python3.9 or above
+    def poly_no_fault(self) -> np.ndarray:
+        def loop_and_get() -> bytes:
+            self.loop()
+            return self.get_poly()
+        poly_packed = self.run_without_glitch(loop_and_get)
+        return self.__d._polyz_unpack(poly_packed)
+
+    @property
+    @functools.lru_cache(maxsize=None)  # replace with @functools.cache when switching to python3.9 or above
+    def poly_predictions(self) -> Dict:
+        polys_map = {}
+        for poly_index in range(0, self.__d._polyz_unpack_num_iters):
+            split_index = (poly_index + 1) * self.__d._polyz_unpack_coeffs_per_iter
+            poly_faulted = np.concatenate((self.poly_no_fault[:split_index], self.poly_no_fault[split_index:]))
+            poly_faulted_packed = self.__d._polyz_pack(poly_faulted)
+            polys_map[poly_faulted_packed] = poly_index
+        return polys_map
 
     @property
     def iteration_duration(self) -> int:
@@ -189,6 +254,8 @@ class SimpleSerial2Dilithium(SimpleSerial2):
     @property
     def all_possible_widths(self) -> [int]:
         cache = [-49.609375, -49.21875, -48.828125, -48.4375, -48.046875, -47.65625, -47.265625, -46.875, -46.484375, -46.09375, -45.703125, -45.3125, -44.921875, -44.53125, -44.140625, -43.75, -43.359375, -42.96875, -42.578125, -42.1875, -41.796875, -41.40625, -41.015625, -40.625, -40.234375, -39.84375, -39.453125, -39.0625, -38.671875, -38.28125, -37.890625, -37.5, -37.109375, -36.71875, -36.328125, -35.9375, -35.546875, -35.15625, -34.765625, -34.375, -33.984375, -33.59375, -33.203125, -32.8125, -32.421875, -32.03125, -31.640625, -31.25, -30.859375, -30.46875, -30.078125, -29.6875, -29.296875, -28.90625, -28.515625, -28.125, -27.734375, -27.34375, -26.953125, -26.5625, -26.171875, -25.78125, -25.390625, -25.0, -24.609375, -24.21875, -23.828125, -23.4375, -23.046875, -22.65625, -22.265625, -21.875, -21.484375, -21.09375, -20.703125, -20.3125, -19.921875, -19.53125, -19.140625, -18.75, -18.359375, -17.96875, -17.578125, -17.1875, -16.796875, -16.40625, -16.015625, -15.625, -15.234375, -14.84375, -14.453125, -14.0625, -13.671875, -13.28125, -12.890625, -12.5, -12.109375, -11.71875, -11.328125, -10.9375, -10.546875, -10.15625, -9.765625, -9.375, -8.984375, -8.59375, -8.203125, -7.8125, -7.421875, -7.03125, -6.640625, -6.25, -5.859375, -5.46875, -5.078125, -4.6875, -4.296875, -3.90625, -3.515625, -3.125, -2.734375, -2.34375, -1.953125, -1.5625, -1.171875, -0.78125, -0.390625, 0.0, 0.390625, 0.78125, 1.171875, 1.5625, 1.953125, 2.34375, 2.734375, 3.125, 3.515625, 3.90625, 4.296875, 4.6875, 5.078125, 5.46875, 5.859375, 6.25, 6.640625, 7.03125, 7.421875, 7.8125, 8.203125, 8.59375, 8.984375, 9.375, 9.765625, 10.15625, 10.546875, 10.9375, 11.328125, 11.71875, 12.109375, 12.5, 12.890625, 13.28125, 13.671875, 14.0625, 14.453125, 14.84375, 15.234375, 15.625, 16.015625, 16.40625, 16.796875, 17.1875, 17.578125, 17.96875, 18.359375, 18.75, 19.140625, 19.53125, 19.921875, 20.3125, 20.703125, 21.09375, 21.484375, 21.875, 22.265625, 22.65625, 23.046875, 23.4375, 23.828125, 24.21875, 24.609375, 25.0, 25.390625, 25.78125, 26.171875, 26.5625, 26.953125, 27.34375, 27.734375, 28.125, 28.515625, 28.90625, 29.296875, 29.6875, 30.078125, 30.46875, 30.859375, 31.25, 31.640625, 32.03125, 32.421875, 32.8125, 33.203125, 33.59375, 33.984375, 34.375, 34.765625, 35.15625, 35.546875, 35.9375, 36.328125, 36.71875, 37.109375, 37.5, 37.890625, 38.28125, 38.671875, 39.0625, 39.453125, 39.84375, 40.234375, 40.625, 41.015625, 41.40625, 41.796875, 42.1875, 42.578125, 42.96875, 43.359375, 43.75, 44.140625, 44.53125, 44.921875, 45.3125, 45.703125, 46.09375, 46.484375, 46.875, 47.265625, 47.65625, 48.046875, 48.4375, 48.828125, 49.21875, 49.609375]
+        # Negative offsets <-45 may result in double glitches!
+        cache = [-44.921875, -44.53125, -44.140625, -43.75, -43.359375, -42.96875, -42.578125, -42.1875, -41.796875, -41.40625, -41.015625, -40.625, -40.234375, -39.84375, -39.453125, -39.0625, -38.671875, -38.28125, -37.890625, -37.5, -37.109375, -36.71875, -36.328125, -35.9375, -35.546875, -35.15625, -34.765625, -34.375, -33.984375, -33.59375, -33.203125, -32.8125, -32.421875, -32.03125, -31.640625, -31.25, -30.859375, -30.46875, -30.078125, -29.6875, -29.296875, -28.90625, -28.515625, -28.125, -27.734375, -27.34375, -26.953125, -26.5625, -26.171875, -25.78125, -25.390625, -25.0, -24.609375, -24.21875, -23.828125, -23.4375, -23.046875, -22.65625, -22.265625, -21.875, -21.484375, -21.09375, -20.703125, -20.3125, -19.921875, -19.53125, -19.140625, -18.75, -18.359375, -17.96875, -17.578125, -17.1875, -16.796875, -16.40625, -16.015625, -15.625, -15.234375, -14.84375, -14.453125, -14.0625, -13.671875, -13.28125, -12.890625, -12.5, -12.109375, -11.71875, -11.328125, -10.9375, -10.546875, -10.15625, -9.765625, -9.375, -8.984375, -8.59375, -8.203125, -7.8125, -7.421875, -7.03125, -6.640625, -6.25, -5.859375, -5.46875, -5.078125, -4.6875, -4.296875, -3.90625, -3.515625, -3.125, -2.734375, -2.34375, -1.953125, -1.5625, -1.171875, -0.78125, -0.390625, 0.0, 0.390625, 0.78125, 1.171875, 1.5625, 1.953125, 2.34375, 2.734375, 3.125, 3.515625, 3.90625, 4.296875, 4.6875, 5.078125, 5.46875, 5.859375, 6.25, 6.640625, 7.03125, 7.421875, 7.8125, 8.203125, 8.59375, 8.984375, 9.375, 9.765625, 10.15625, 10.546875, 10.9375, 11.328125, 11.71875, 12.109375, 12.5, 12.890625, 13.28125, 13.671875, 14.0625, 14.453125, 14.84375, 15.234375, 15.625, 16.015625, 16.40625, 16.796875, 17.1875, 17.578125, 17.96875, 18.359375, 18.75, 19.140625, 19.53125, 19.921875, 20.3125, 20.703125, 21.09375, 21.484375, 21.875, 22.265625, 22.65625, 23.046875, 23.4375, 23.828125, 24.21875, 24.609375, 25.0, 25.390625, 25.78125, 26.171875, 26.5625, 26.953125, 27.34375, 27.734375, 28.125, 28.515625, 28.90625, 29.296875, 29.6875, 30.078125, 30.46875, 30.859375, 31.25, 31.640625, 32.03125, 32.421875, 32.8125, 33.203125, 33.59375, 33.984375, 34.375, 34.765625, 35.15625, 35.546875, 35.9375, 36.328125, 36.71875, 37.109375, 37.5, 37.890625, 38.28125, 38.671875, 39.0625, 39.453125, 39.84375, 40.234375, 40.625, 41.015625, 41.40625, 41.796875, 42.1875, 42.578125, 42.96875, 43.359375, 43.75, 44.140625, 44.53125, 44.921875, 45.3125, 45.703125, 46.09375, 46.484375, 46.875, 47.265625, 47.65625, 48.046875, 48.4375, 48.828125, 49.21875, 49.609375]
         if cache:
             return cache
 
