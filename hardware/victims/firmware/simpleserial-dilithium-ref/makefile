@@ -32,6 +32,8 @@
 # This is the name of the compiled .hex file.
 TARGET = simpleserial-dilithium-ref
 
+CDEFS = -DSHUFFLE=1
+
 DILITHIUM_SOURCES = dilithium/ref/sign.c dilithium/ref/packing.c dilithium/ref/polyvec.c dilithium/ref/poly.c dilithium/ref/ntt.c dilithium/ref/reduce.c dilithium/ref/rounding.c
 DILITHIUM_FIPS202_SRCS= $(DILITHIUM_SOURCES) dilithium/ref/symmetric-shake.c
 
