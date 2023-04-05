@@ -35,3 +35,10 @@
 	path = hardware/victims/firmware/simpleserial-dilithium-ref/dilithium
 	url = https://github.com/Alex1s/dilithium.git
 	branch = attack-shuffling-countermeasure
+[submodule "python-dilithium"]
+	path = python-dilithium
+	url = https://github.com/Alex1s/python-dilithium.git
+[submodule "dilithium_solver"]
+	path = dilithium_solver
+	url = git@github.com:viniul/alexis-loop-abort-faults.git
+	branch = generic_module
